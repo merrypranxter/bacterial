@@ -1,0 +1,343 @@
+Preset interpolation allows your shader art to smoothly transition between different bacterial species, morphotypes, and neon color palettes over time or across space. 
+
+Because reaction-diffusion and biological growth kinetics undergo **non-linear Turing bifurcations** [1], smoothly drifting the input parameters causes the colony to undergo dramatic, organic "phase changes"—where concentric rings suddenly split into fractal branches, or dense disks melt into swirling spots [2, 3].
+
+---
+
+### 1. The Mathematics of Preset Morphing
+
+To transition smoothly between two species presets (e.g., Preset \\(A\\) at \\(t_0\\) and Preset \\(B\\) at \\(t_1\\)), we define an interpolation factor \\(\alpha \in [4]\\):
+
+\\[\alpha(t) = \text{smoothstep}(0.0, 1.0, \text{clamp}\left(\frac{t - t_0}{t_1 - t_0}, 0.0, 1.0\right))\\]
+
+Using Hermite smoothstep (\\(\alpha^2 (3 - 2\alpha)\\)) instead of linear lerp prevents harsh velocity spikes at the beginning and end of the transition.
+
+Every parameter in the simulation and optics pipelines is then blended simultaneously:
+
+| Parameter | Preset A (*B. subtilis*) | Preset B (*P. mirabilis*) | Blended State (\\(\alpha = 0.5\\)) |
+| :--- | :--- | :--- | :--- |
+| **Feed Rate (\\(F\\))** | `0.034` | `0.022` | `0.028` |
+| **Kill Rate (\\(k\\))** | `0.065` | `0.051` | `0.058` |
+| **Non-Linear Exponent** | `1.8` | `1.0` | `1.4` |
+| **Height Scale** | `8.0` | `4.5` | `6.25` |
+| **Cosine Palette Vector \\(\mathbf{d}\\)** | `vec3(0.0, 0.33, 0.67)` | `vec3(0.0, 0.25, 0.25)` | `vec3(0.0, 0.29, 0.46)` |
+
+---
+
+### 2. GLSL Implementation: Two Modes of Interpolation
+
+Preset interpolation can be implemented in shaders using two distinct modes [3]:
+
+#### Mode A: Global Temporal Drift (Whole Colony Morphing)
+In this mode, a time-varying uniform `u_blend` shifts the entire simulation grid simultaneously from one species parameter regime to another [3].
+
+```glsl
+// GLSL snippet inside Simulation Pass
+uniform float u_blend; // Ranges from 0.0 (Species A) to 1.0 (Species B)
+
+// Define parameters for Species A (e.g. Fractal Branching) and Species B (e.g. Swarm Rings)
+float feed = mix(0.034, 0.022, u_blend);
+float kill = mix(0.065, 0.051, u_blend);
+float nonLinExp = mix(1.8, 1.0, u_blend);
+
+// Evaluate multi-layer species update with blended parameters
+vec2 nextChem = stepSpeciesPDE(uv, feed, kill, nonLinExp);
+```
+
+#### Mode B: Spatial Field Interpolation (Hybrid Multi-Species Agar)
+Instead of uniform morphing across the whole canvas, feed a 2D Simplex/Perlin noise texture or brightness map into `u_blend` [3, 5, 6]. This creates a **heterogeneous nutrient dish**, where the left side of the canvas grows *Bacillus* fractal tendrils while the right side grows *Proteus* swarming rings, with a seamless, organic hybrid boundary in the middle!
+
+```glsl
+// GLSL snippet for Spatial Hybrid Field
+uniform sampler2D u_noiseTex;
+uniform float u_time;
+
+void main() {
+    vec2 uv = gl_FragCoord.xy / u_resolution.xy;
+
+    // Generate dynamic spatial blend map using domain-warped noise
+    float spatialAlpha = texture(u_noiseTex, uv * 2.0 + vec2(u_time * 0.05)).r;
+    spatialAlpha = smoothstep(0.2, 0.8, spatialAlpha);
+
+    // Localized parameter interpolation
+    float localFeed = mix(presetA.feed, presetB.feed, spatialAlpha);
+    float localKill = mix(presetA.kill, presetB.kill, spatialAlpha);
+
+    // Compute localized PDE update
+    // ...
+}
+```
+
+---
+
+### 3. JavaScript / WebGL Timeline Integration
+
+To wire this into your application's timeline controller, manage preset keyframes in JS and pass the interpolated struct to GLSL:
+
+```javascript
+// Preset Interpolator Utility
+export function interpolatePresets(presetA, presetB, alpha) {
+  const lerp = (a, b, t) => a + (b - a) * t;
+  const lerpVec3 = (a, b, t) => a.map((val, i) => lerp(val, b[i], t));
+
+  // Smoothstep Hermite curve
+  const sAlpha = alpha * alpha * (3.0 - 2.0 * alpha);
+
+  return {
+    feedRate: lerp(presetA.feedRate, presetB.feedRate, sAlpha),
+    killRate: lerp(presetA.killRate, presetB.killRate, sAlpha),
+    nonLinearExponent: lerp(presetA.nonLinearExponent, presetB.nonLinearExponent, sAlpha),
+    heightScale: lerp(presetA.heightScale, presetB.heightScale, sAlpha),
+    paletteA: lerpVec3(presetA.colorPalette.a, presetB.colorPalette.a, sAlpha),
+    paletteD: lerpVec3(presetA.colorPalette.d, presetB.colorPalette.d, sAlpha),
+    rimColor: lerpVec3(presetA.rimColor, presetB.rimColor, sAlpha),
+  };
+}
+```
+
+---
+
+### 🎨 Artistic Applications of Preset Morphing
+
+1. **Mutating Colony Animations**: Keyframe a timeline where a single inoculated seed starts as smooth circular disks, mutates into electric branching tendrils during mid-growth, and settles into terraced 3D wrinkled rings as nutrients deplete.
+2. **Interactive Morphing Canvas**: Bind the `u_blend` factor to mouse position or a UI slider so users can manually scrub through the entire biological parameter space in real-time.
+3. **Multi-Species Hybrid Prints**: Render static 8K art prints using spatial noise maps where two incompatible species collide and form complex boundary interaction patterns [7].
+
+---
+
+
+Setting up **multi-channel RGBA state buffers** allows you to simulate multiple interacting biological fields (like nutrients, active biomass, frozen matrix, and fluid film) within a single floating-point texture pass [1, 2].
+
+Here is how to set up multi-channel state buffers using **WebGL2** (or **Three.js**) and **GLSL**.
+
+---
+
+### 1. The RGBA Channel Assignment Scheme
+Instead of using separate single-channel grayscale textures for each biological layer, pack them into a single 4-channel `RGBA32F` texture [1, 2]:
+
+| Channel | Biological Variable | Mathematical Role |
+| :--- | :--- | :--- |
+| **Red (`R`)** | Nutrients \\(N(x,y)\\) | Local food concentration consumed by bacteria. |
+| **Green (`G`)** | Active Biomass \\(B(x,y)\\) | Live dividing bacteria that diffuse and react. |
+| **Blue (`B`)** | Frozen Matrix \\(S(x,y)\\) | Inactive pre-spores & ECM forming a permanent 3D height map. |
+| **Alpha (`A`)** | Surfactant Film \\(L(x,y)\\) | Lubrication fluid enabling swarming & branching. |
+
+---
+
+### 2. Setting Up Ping-Pong Framebuffers in WebGL2
+
+GPUs cannot read from and write to the same texture simultaneously [3-5]. You need a **Ping-Pong FBO Pair** (`bufferA` and `bufferB`) that swap roles each frame [2, 4, 5].
+
+```javascript
+// WebGL2 Floating-Point Ping-Pong Setup
+function createFloatFramebuffer(gl, width, height) {
+  const texture = gl.createTexture();
+  gl.bindTexture(gl.TEXTURE_2D, texture);
+  
+  // Allocate RGBA32F 32-bit floating point storage
+  gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA32F, width, height, 0, gl.RGBA, gl.FLOAT, null);
+  
+  // CRITICAL: Use NEAREST filtering so GPU interpolation doesn't blur discrete PDE values
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+
+  const fbo = gl.createFramebuffer();
+  gl.bindFramebuffer(gl.FRAMEBUFFER, fbo);
+  gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, texture, 0);
+
+  return { fbo, texture };
+}
+
+// Create ping-pong pair
+let stateRead  = createFloatFramebuffer(gl, width, height);
+let stateWrite = createFloatFramebuffer(gl, width, height);
+```
+
+---
+
+### 3. Reading and Unpacking in the GLSL Simulation Shader
+
+Inside your simulation fragment pass, sample the read-buffer texture and unpack all 4 channels simultaneously [1, 6]:
+
+```glsl
+#version 300 es
+precision highp float;
+
+uniform sampler2D u_prevState; // Input Ping-Pong Texture
+uniform vec2 u_resolution;
+uniform float u_dt;
+
+out vec4 fragColor; // Output RGBA state to Write Framebuffer
+
+void main() {
+    vec2 uv = gl_FragCoord.xy / u_resolution;
+    
+    // Unpack 4 biological channels from previous frame
+    vec4 state = texture(u_prevState, uv);
+    float N = state.r; // Nutrients
+    float B = state.g; // Active Biomass
+    float S = state.b; // Frozen Pre-spores
+    float L = state.a; // Surfactant Lubricant
+
+    // --- Compute Laplacian & Reaction Terms ---
+    // (Evaluate multi-species PDE equations here)
+    
+    float nextN = clamp(N - (B * N * u_dt), 0.0, 1.0);
+    float nextB = clamp(B + (B * N - 0.02 * B) * u_dt, 0.0, 1.0);
+    float nextS = S + (0.01 * B * (1.0 - N)); // Accumulate frozen height when food is low
+    float nextL = clamp(L + (0.05 * B * N) * u_dt, 0.0, 1.0);
+
+    // Pack updated state back into RGBA channels
+    fragColor = vec4(nextN, nextB, nextS, nextL);
+}
+```
+
+---
+
+### 4. The JavaScript Execution & Swap Loop
+
+During your animation loop, bind `stateWrite.fbo` as the render target, pass `stateRead.texture` into `u_prevState`, execute the draw call, and swap pointers [2, 4, 5]:
+
+```javascript
+function stepSimulation() {
+  // 1. Bind destination Framebuffer
+  gl.bindFramebuffer(gl.FRAMEBUFFER, stateWrite.fbo);
+  gl.viewport(0, 0, width, height);
+
+  // 2. Bind source texture uniform
+  gl.activeTexture(gl.TEXTURE0);
+  gl.bindTexture(gl.TEXTURE_2D, stateRead.texture);
+  gl.uniform1i(u_prevStateLocation, 0);
+
+  // 3. Render full-screen quad pass
+  gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
+
+  // 4. Swap Ping-Pong pointers for next frame
+  let temp = stateRead;
+  stateRead = stateWrite;
+  stateWrite = temp;
+}
+```
+
+---
+
+Here is the GLSL fragment shader pass that samples your 4-channel RGBA state buffer (`R`: Nutrients, `G`: Active Biomass, `B`: Frozen Matrix, `A`: Surfactant Film) to compute 3D surface normals, wet specular gloss, and neon rim lighting.
+
+---
+
+### GLSL Render Pass Shader (`render_pass.glsl`)
+
+```glsl
+#version 300 es
+precision highp float;
+
+uniform sampler2D u_stateBuffer; // Input RGBA32F Ping-Pong State Buffer
+uniform vec2 u_resolution;
+uniform float u_time;
+
+out vec4 fragColor;
+
+// 1. Inigo Quilez Cosine Gradient Palette Function
+vec3 neonPalette(float t) {
+    vec3 a = vec3(0.5, 0.5, 0.5);
+    vec3 b = vec3(0.5, 0.5, 0.5);
+    vec3 c = vec3(1.0, 1.0, 1.0);
+    vec3 d = vec3(0.0, 0.33, 0.67); // Shifts through Cyan -> Magenta -> Yellow
+    return a + b * cos(6.2831853 * (c * t + d));
+}
+
+// 2. Helper to compute physical height from state channels
+float getPhysicalHeight(vec2 uv) {
+    vec4 state = texture(u_stateBuffer, uv);
+    float activeBiomass = state.g; // Green channel
+    float frozenMatrix  = state.b; // Blue channel
+    
+    // Total elevation = Permanent frozen matrix + Bulge of active live biomass
+    return frozenMatrix + 0.7 * pow(activeBiomass, 0.8);
+}
+
+void main() {
+    vec2 uv = gl_FragCoord.xy / u_resolution.xy;
+    vec2 texel = 1.0 / u_resolution.xy;
+
+    // 3. Unpack Center Texel State
+    vec4 state = texture(u_stateBuffer, uv);
+    float nutrients     = state.r; // Red
+    float activeBiomass = state.g; // Green
+    float frozenMatrix  = state.b; // Blue
+    float lubricant     = state.a; // Alpha
+
+    // 4. Finite-Difference Normal Reconstruction from Height Map
+    float hN = getPhysicalHeight(uv + vec2(0.0,  texel.y));
+    float hS = getPhysicalHeight(uv - vec2(0.0,  texel.y));
+    float hE = getPhysicalHeight(uv + vec2( texel.x, 0.0));
+    float hW = getPhysicalHeight(uv - vec2(-texel.x, 0.0));
+
+    float heightScale = 8.0;
+    vec3 normal = normalize(vec3((hW - hE) * heightScale, (hS - hN) * heightScale, 1.0));
+
+    // 5. Lighting Setup
+    vec3 lightDir = normalize(vec3(0.5, 0.8, 0.8));
+    vec3 viewDir  = vec3(0.0, 0.0, 1.0);
+    vec3 halfVec  = normalize(lightDir + viewDir);
+
+    // 6. Calculate Shading Components
+    float NdotL = max(dot(normal, lightDir), 0.0);
+    float NdotH = max(dot(normal, halfVec), 0.0);
+    float NdotV = max(dot(normal, viewDir), 0.0);
+
+    // Wet Specular Gloss (Boosted by surfactant fluid film alpha channel)
+    float specPower = mix(32.0, 128.0, lubricant); 
+    float specular  = pow(NdotH, specPower) * (0.4 + 0.6 * lubricant);
+
+    // Fresnel Rim Glow along steep edges and growth fronts
+    float fresnel = pow(clamp(1.0 - NdotV, 0.0, 1.0), 3.5);
+
+    // 7. Color Composition
+    // Map total cell density (active + frozen matrix) to neon palette
+    float totalDensity = activeBiomass + frozenMatrix;
+    vec3 baseNeon = neonPalette(totalDensity * 2.5 + u_time * 0.05);
+
+    // Subsurface Scattering (SSS) Inner Translucency Glow
+    vec3 sssGlow = vec3(0.0, 0.9, 0.6) * activeBiomass * (1.0 - NdotL * 0.5);
+
+    // Combine diffuse, specular, SSS, and cyan rim highlights
+    vec3 finalColor = baseNeon * (NdotL * 0.7 + 0.3);
+    finalColor += sssGlow;
+    finalColor += vec3(specular * 0.8);
+    finalColor += vec3(0.0, 1.0, 0.85) * fresnel * (totalDensity + 0.2);
+
+    fragColor = vec4(finalColor, 1.0);
+}
+```
+
+---
+
+### How the Pipeline Flows
+
+1. **Height Assembly (`getPhysicalHeight`)**: Combines the frozen pre-spore matrix (`B`) and live biomass (`G`) into a single scalar elevation map.
+2. **Surfactant Modification**: The surfactant film (`A`) dynamically increases the specular exponent (`specPower`), making wet swarming areas look glossier than dry, hardened agar.
+3. **Subsurface Glow**: Active biomass (`G`) emits an internal translucency term (`sssGlow`) that lights up even when facing away from the key light.
+
+---
+
+🧪 **Would you like to build a timeline script next that controls how nutrients decay and forces colonies to buckle into 3D wrinkles as they age?**
+
+
+
+I've built the **Biological Timeline & Biofilm Buckling Controller** and saved it as **`bacterial-timeline-controller.js`** in your Studio panel.
+
+### 🧬 How the Timeline Controller Works
+
+This module acts as a state machine that drives the simulation and GLSL shader uniforms through four distinct biological growth phases over time:
+
+1. **Lag Phase (`0s - 3s`)**: Bacteria adapt to the substrate with minimal cell division and baseline nutrient diffusion.
+2. **Exponential Expansion (`3s - 12s`)**: Rapid biomass growth and radial expansion, consuming nutrients (`N`) and driving non-linear front movement.
+3. **Nutrient Exhaustion (`12s - 20s`)**: Local food sources deplete, triggering active biomass (`B`) to solidify into a permanent 3D extracellular matrix (`S`).
+4. **Biofilm Buckling (`20s - 30s`)**: High cell density creates mechanical compressive stress, dynamically scaling `u_bucklingAmplitude` and `u_bucklingFrequency` to fold the colony surface into 3D wrinkles and ridges.
+
+---
+
+🎨 **Would you like to build an 8K high-resolution frame exporter next so you can capture still snapshots of these wrinkled, neon morphotypes for art prints?**
