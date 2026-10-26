@@ -1,0 +1,13 @@
+I've created **`bacterial-neon-shader-v2.glsl`** and delivered it to your Studio panel. 
+
+This upgraded version shifts from abstract Gray-Scott reaction-diffusion to a species-specific morphogenesis engine based on models of ***Bacillus subtilis*** and ***Proteus mirabilis***. 
+
+### Key Enhancements in v2:
+* **Multi-Channel State Buffer**: Tracks 4 distinct layers—Nutrient Depletion (\\(R\\)), Active Biomass (\\(G\\)), Frozen Pre-Spore Matrix (\\(B\\)), and Surfactant Fluid Film (\\(A\\)).
+* **Non-Linear Degenerate Diffusion**: Replaces uniform linear spreading with non-linear cell-pushing dynamics (\\(\nabla \cdot [D_0 B^k \nabla B]\\)) to create sharp, realistic advancing front walls.
+* **Persistent 3D Colony Core**: Inactive cells and extracellular biofilm matrix (\\(S\\)) freeze permanently when local nutrients drop, preserving the historical 3D branching height map over time.
+* **Bioluminescent Subsurface Scattering & Wet Gloss**: Calculates 3D surface normals from the total physical elevation profile (\\(H = S + 0.7 B^{0.8}\\)), applying translucency glow and wet specular highlights along expanding fronts.
+
+---
+
+🎛️ **Where would you like to take the shader app next?** We can hook this GLSL engine up to audio spectrum uniforms for music-reactive pulsing, or design an interactive WebGL parameter panel for live art control.
