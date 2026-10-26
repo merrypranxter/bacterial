@@ -1,0 +1,142 @@
+I've generated the complete GLSL prototype for your bacterial shader art simulation and saved it as **`bacterial-neon-shader.glsl`** in your Studio panel [1, 2]. 
+
+This shader combines Gray-Scott reaction-diffusion kinetics [2, 3], finite-difference surface normal reconstruction [4, 5], an Inigo Quilez cosine gradient color palette [6], and specular/Fresnel rim lighting [7, 8].
+
+---
+
+### 💻 GLSL Prototype Source (`bacterial-neon-shader.glsl`)
+
+```glsl
+/*
+================================================================================
+  BACTERIAL NEON SHADER ART (GLSL / Shadertoy Prototype)
+================================================================================
+  Pass 1 (Buffer A): Gray-Scott Reaction-Diffusion Simulation Engine
+  Pass 2 (Image):    3D Normal Reconstruction, Neon Optics & Lighting
+================================================================================
+*/
+
+// =============================================================================
+// PASS 1: BUFFER A (Simulation State Engine)
+// Set iChannel0 to "Buffer A" (Feedback Loop) in Shadertoy
+// =============================================================================
+
+#ifdef BUFFER_A
+
+void mainImage( out vec4 fragColor, in vec2 fragCoord )
+{
+    vec2 uv = fragCoord / iResolution.xy;
+    vec2 texel = 1.0 / iResolution.xy;
+
+    // Reaction-Diffusion Kinetics Parameters
+    float diffA = 1.0;
+    float diffB = 0.5;
+    float feed  = 0.037;  // Feed rate (F)
+    float kill  = 0.060;  // Kill rate (k)
+    float dt    = 1.0;    // Time step
+
+    // Initial Conditions & Seeding
+    if (iFrame < 5) {
+        float dist = length(uv - vec2(0.5));
+        float seed = step(dist, 0.03);
+        fragColor = vec4(1.0 - seed, seed * 0.5, 0.0, 1.0);
+        return;
+    }
+
+    // Sample Previous Frame State (R = Substrate A, G = Catalyst B)
+    vec2 chem = texture(iChannel0, uv).rg;
+
+    // 9-Point Discrete Laplacian Convolution
+    vec2 lap = -1.0 * chem;
+    lap += 0.20 * texture(iChannel0, uv + vec2(-texel.x, 0.0)).rg;
+    lap += 0.20 * texture(iChannel0, uv + vec2( texel.x, 0.0)).rg;
+    lap += 0.20 * texture(iChannel0, uv + vec2(0.0, -texel.y)).rg;
+    lap += 0.20 * texture(iChannel0, uv + vec2(0.0,  texel.y)).rg;
+    lap += 0.05 * texture(iChannel0, uv + vec2(-texel.x, -texel.y)).rg;
+    lap += 0.05 * texture(iChannel0, uv + vec2( texel.x, -texel.y)).rg;
+    lap += 0.05 * texture(iChannel0, uv + vec2(-texel.x,  texel.y)).rg;
+    lap += 0.05 * texture(iChannel0, uv + vec2( texel.x,  texel.y)).rg;
+
+    // Evaluate Reaction Terms: A + 2B -> 3B
+    float a = chem.x;
+    float b = chem.y;
+    float reaction = a * b * b;
+
+    float da = (diffA * lap.x) - reaction + feed * (1.0 - a);
+    float db = (diffB * lap.y) + reaction - (feed + kill) * b;
+
+    // Interactive Mouse Click Seeding
+    if (iMouse.z > 0.0 && length(uv - iMouse.xy / iResolution.xy) < 0.02) {
+        b = 0.8;
+    }
+
+    // Integration and Clamping
+    vec2 nextChem = clamp(vec2(a + da * dt, b + db * dt), 0.0, 1.0);
+
+    fragColor = vec4(nextChem, 0.0, 1.0);
+}
+
+#endif
+
+
+// =============================================================================
+// PASS 2: IMAGE SHADER (3D Heightmap, Neon Color Palette & Lighting)
+// Set iChannel0 to "Buffer A" in Shadertoy
+// =============================================================================
+
+#ifndef BUFFER_A
+
+// Inigo Quilez Cosine Gradient Palette Function
+vec3 neonPalette(float t) {
+    vec3 a = vec3(0.5, 0.5, 0.5);
+    vec3 b = vec3(0.5, 0.5, 0.5);
+    vec3 c = vec3(1.0, 1.0, 1.0);
+    vec3 d = vec3(0.0, 0.33, 0.67); // Electric Cyan/Magenta/Yellow shifts
+    return a + b * cos(6.2831853 * (c * t + d));
+}
+
+void mainImage( out vec4 fragColor, in vec2 fragCoord )
+{
+    vec2 uv = fragCoord / iResolution.xy;
+    vec2 texel = 1.0 / iResolution.xy;
+
+    // 1. Read Catalyst Concentration (Heightmap Value)
+    float hCenter = texture(iChannel0, uv).g;
+
+    // 2. Finite-Difference Surface Normal Reconstruction
+    float hN = texture(iChannel0, uv + vec2(0.0, texel.y)).g;
+    float hS = texture(iChannel0, uv - vec2(0.0, texel.y)).g;
+    float hE = texture(iChannel0, uv + vec2(texel.x, 0.0)).g;
+    float hW = texture(iChannel0, uv - vec2(texel.x, 0.0)).g;
+
+    float heightScale = 6.0;
+    vec3 normal = normalize(vec3((hW - hE) * heightScale, (hS - hN) * heightScale, 1.0));
+
+    // 3. Lighting Vectors
+    vec3 lightDir = normalize(vec3(0.5, 0.7, 1.0));
+    vec3 viewDir  = vec3(0.0, 0.0, 1.0);
+    vec3 halfVec  = normalize(lightDir + viewDir);
+
+    // 4. Shading & Rim Terms
+    float diffuse = max(dot(normal, lightDir), 0.0);
+    float spec    = pow(max(dot(normal, halfVec), 0.0), 32.0); // Wet Specular Gloss
+    float fresnel = pow(clamp(1.0 - dot(normal, viewDir), 0.0, 1.0), 3.0); // Rim Glow
+
+    // 5. Psychedelic Neon Palette Mapping
+    vec3 baseColor = neonPalette(hCenter * 3.0 + iTime * 0.1);
+    vec3 rimColor  = vec3(0.0, 1.0, 0.85); // Electric Cyan Rim
+
+    // 6. Final Color Composition
+    vec3 finalColor = baseColor * (diffuse * 0.85 + 0.25);
+    finalColor += vec3(spec * 0.7);
+    finalColor += rimColor * fresnel * (hCenter * 1.5);
+
+    fragColor = vec4(finalColor, 1.0);
+}
+
+#endif
+```
+
+---
+
+🎛️ **How would you like to tweak this prototype?** We could add domain-warped fractal noise for liquid swirls, add an audio spectrum uniform input for music reactivity, or set up a multi-pass subsurface scattering blur pass.
