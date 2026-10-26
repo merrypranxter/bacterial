@@ -1,0 +1,137 @@
+Got it—we'll shelf audio reactivity for now and focus purely on **time-evolution, lifecycle progression, and repository architecture**.
+
+To make your repository as clear and actionable as possible for an AI coding assistant (like Cursor, Claude, or Copilot) to build, refactor, and extend your app, you should structure it around **modular GLSL files**, **a structured species preset schema**, and **a timeline controller**.
+
+Here are the key systems and files to add to your repository:
+
+---
+
+### 1. Species Morphotype Preset Dictionary (`presets.json`)
+AI models write much better code when parameters are decoupled from shader logic into a clean JSON schema. This allows an AI to immediately generate or interpolate new species presets without breaking the GLSL simulation math.
+
+```json
+{
+  "species_presets": {
+    "bacillus_subtilis_dla": {
+      "name": "Bacillus subtilis (Fractal Branching)",
+      "diffA": 1.0,
+      "diffB": 0.5,
+      "feedRate": 0.034,
+      "killRate": 0.065,
+      "nonLinearExponent": 1.8,
+      "colorPalette": {
+        "a": [0.5, 0.5, 0.5],
+        "b": [0.5, 0.5, 0.5],
+        "c": [1.0, 1.0, 1.0],
+        "d": [0.0, 0.33, 0.67]
+      },
+      "rimColor": [0.0, 1.0, 0.85],
+      "heightScale": 8.0
+    },
+    "proteus_mirabilis_rings": {
+      "name": "Proteus mirabilis (Terraced Swarm Rings)",
+      "diffA": 0.9,
+      "diffB": 0.3,
+      "feedRate": 0.022,
+      "killRate": 0.051,
+      "nonLinearExponent": 1.0,
+      "colorPalette": {
+        "a": [0.8, 0.5, 0.4],
+        "b": [0.2, 0.4, 0.2],
+        "c": [2.0, 1.0, 1.0],
+        "d": [0.0, 0.25, 0.25]
+      },
+      "rimColor": [1.0, 0.4, 0.0],
+      "heightScale": 4.5
+    }
+  }
+}
+```
+
+---
+
+### 2. Biological Timeline & Lifecycle Controller (`TimelineController.js`)
+Instead of driving growth with a simple linear time variable (`iTime`), biological growth moves through **distinct physiological stages**. Defining a timeline state machine lets an AI easily script animations, keyframe transitions, or export morphing time-lapse prints.
+
+```javascript
+// Stage 1: Lag Phase (0s - 3s) -> Bacteria adapt, zero movement, nutrient diffusion only
+// Stage 2: Exponential Growth (3s - 15s) -> Rapid radial expansion, high feed/kill activity
+// Stage 3: Nutrient Exhaustion (15s - 25s) -> Active biomass converts to frozen matrix (S)
+// Stage 4: Biofilm Buckling (25s+) -> Mechanical stress produces 3D surface wrinkles
+
+export class BacterialTimeline {
+  constructor(preset) {
+    this.preset = preset;
+    this.stage = 'LAG_PHASE';
+    this.progress = 0.0;
+  }
+
+  update(deltaTime) {
+    this.progress += deltaTime;
+    
+    // Smoothly drift feed & kill rates along phase-space trajectories over time
+    if (this.progress > 3.0 && this.progress <= 15.0) {
+      this.stage = 'EXPONENTIAL_EXPANSION';
+    } else if (this.progress > 15.0 && this.progress <= 25.0) {
+      this.stage = 'NUTRIENT_EXHAUSTION';
+      // Lower feed rate as local nutrients deplete
+      this.preset.feedRate *= 0.995; 
+    } else if (this.progress > 25.0) {
+      this.stage = 'MATURE_BIOFILM_WRINKLING';
+      // Increase height scale to accentuate mechanical 3D wrinkles
+      this.preset.heightScale += 0.01; 
+    }
+  }
+}
+```
+
+---
+
+### 3. Modular Shader Directory Structure
+Rather than storing shaders as monolithic single files, split them into dedicated modules under a `/shaders/` folder. AI coding assistants excel at editing modular files without introducing regressions:
+
+```
+/my-bacterial-shader-repo/
+├── /shaders/
+│   ├── stencil_laplacian.glsl   <-- 19-point Patra-Karttunen stencil functions
+│   ├── simulation_pass.glsl     <-- Multi-channel PDE updates (Nutrients, Biomass, Matrix)
+│   ├── height_normals.glsl      <-- 3D displacement & finite-difference normal calculation
+│   ├── color_palettes.glsl      <-- Inigo Quilez cosine color ramps & neon functions
+│   └── lighting_render.glsl     <-- Fresnel rim glow, wet specular highlights, and SSS
+├── presets.json                 <-- Species parameters & color dictionary
+├── TimelineController.js        <-- Biological growth stage keyframing
+├── AI_CONTEXT.md                <-- Project instruction guide for AI coders
+└── README.md                    <-- Math specs & setup guide
+```
+
+---
+
+### 4. `AI_CONTEXT.md` (System Context File for AI Tools)
+Create a markdown file in your root folder specifically to prime any AI assistant (like Cursor or Copilot) that opens your project:
+
+```markdown
+# Project Context: Bacterial Shader Art Framework
+
+## Core Architecture
+- **Texture Channels**:
+  - `Red`: Nutrient concentration $N(x,y)$ [1.0 -> 0.0]
+  - `Green`: Active bacterial biomass $B(x,y)$
+  - `Blue`: Frozen pre-spore / ECM matrix $S(x,y)$ (Permanent height map)
+  - `Alpha`: Surfactant fluid film $L(x,y)$
+- **Discretization**: Uses a 19-point isotropic Laplacian stencil (`stencil_laplacian.glsl`).
+- **Rendering**: Converts scalar concentration $H = S + 0.7B^{0.8}$ into 3D surface normals for wet specular gloss, Fresnel rim lighting, and cosine color mapping.
+
+## Rules for AI Modifications
+1. Never convert the 19-point Laplacian back to a 4-point or 9-point stencil (prevents grid anisotropy).
+2. Ensure framebuffers use 32-bit floating point textures (`RGBA32F`) to prevent numerical clamping during PDE integration.
+3. Keep lighting and color code decoupled from the simulation PDE pass.
+```
+
+---
+
+### 5. High-Resolution Frame Sequencer & Print Exporter
+Since your goal is to make **prints, graphic designs, and flat art pieces**, add a lightweight export utility script (e.g., using WebGL `canvas.toDataURL()` or a Puppeteer script). This allows an AI to write a one-click CLI command that renders high-res (4K/8K) still frames or time-lapse image sequences at key milestone points along the growth timeline.
+
+---
+
+🖼️ **Would you like to draft the high-resolution canvas export script next, or focus on setting up preset interpolation so colonies morph smoothly from one species type into another over time?**
