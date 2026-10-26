@@ -1,0 +1,5 @@
+I've integrated the 19-point Patra–Karttunen isotropic Laplacian stencil into **`bacterial-neon-shader-v3.glsl`**, now delivered to your Studio panel.
+
+This update eliminates grid-alignment artifacts during growth, allowing branching tendrils, swarming ripples, and non-linear bacterial fronts to propagate smoothly and isotropically in all directions. It also preserves the multi-layer state buffer (nutrients, active biomass, frozen core, and surfactant layer) alongside the neon cosine palette and wet specular/rim lighting passes.
+
+🎛️ **Would you like to add domain-warped fractal noise to create swirling liquid tendrils, or set up audio-reactive uniforms so the colony pulses to music?**
