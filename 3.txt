@@ -1,0 +1,77 @@
+Generic Gray-Scott reaction-diffusion produces abstract, uniform Turing patterns (like uniform leopard spots or coral mazes). Real bacterial colonies do not grow like simple chemical oscillators—they grow by **consuming localized nutrients, secreting lubricating fluids, switching between active/inactive cell states, and responding to chemotactic signaling** [1-4].
+
+To get realistic-looking colonies for specific species, you need to implement **species-specific mathematical models** [2, 4-6].
+
+---
+
+### 1. *Bacillus subtilis* (The Mimura & Kitsunezaki Models)
+*Bacillus subtilis* is famous in biophysics because a single strain can form **5 completely different morphotypes** depending on agar hardness and nutrient levels: DLA fractals, Eden blobs, concentric terraced rings, dense branching (DBM), and smooth disks [7-9].
+
+#### Key Mathematical Mechanism: Non-Linear Degenerate Diffusion & Inactive States
+Instead of linear Fickian diffusion (\\(\nabla^2 b\\)), *B. subtilis* cells push against one another when crowded [10]. When local nutrients are depleted, active cells (\\(b\\)) freeze into an immobile, inactive state (\\(s\\)) [2, 3].
+
+\\[\frac{\partial b}{\partial t} = \underbrace{\nabla \cdot (D_0 b^k \nabla b)}_{\text{Non-linear cell pushing}} + \underbrace{\omega \, g(n) \, b}_{\text{Nutrient-driven growth}} - \underbrace{a(b, n) \, b}_{\text{Transition to inactive state}} [2, 11]\\]
+
+\\[\frac{\partial n}{\partial t} = D_n \nabla^2 n - g(n) \, b \quad \text{(Nutrient consumption)} [2]\\]
+
+\\[\frac{\partial s}{\partial t} = a(b, n) \, b \quad \text{(Immobile pre-spores / frozen colony core)} [2]\\]
+
+* **Shader Translation**: 
+  * \\(k > 0\\) (typically \\(k=1\\) or \\(k=2\\)) creates **sharp advancing front walls** rather than smooth blurred edges [10, 12].
+  * The cumulative height/thickness of the colony is rendered as \\(b + s\\) [3, 13]. Because inactive cells \\(s\\) never move or decay, they freeze the historical growth path in place, creating crisp, permanent branch structures [3].
+
+---
+
+### 2. *Paenibacillus dendritiformis* (The Ben-Jacob Lubricating Branching Model)
+*P. dendritiformis* forms intricate, electric, feather-like fractal tendrils (\\(T\\)-morphotype) or chiral, curved, hook-like branches (\\(C\\)-morphotype) [14, 15].
+
+#### Key Mathematical Mechanism: Lubrication Fluid & Chemorepellent
+The bacteria cannot move on dry agar unless they collectively secrete a surfactant/lubricant fluid film (\\(l\\)) [16-18]. The cell diffusion \\(D_b\\) is directly gated by local fluid thickness \\(l\\) [1, 13].
+
+\\[\frac{\partial b}{\partial t} = \nabla \cdot \left(D_b \, l^\gamma \, \nabla b\right) + b \, n - \mu \, b [12, 13]\\]
+
+\\[\frac{\partial l}{\partial t} = \underbrace{\nabla \cdot \left(D_l \, l^\nu \, \nabla l + j \, D_b \, l^\gamma \, \nabla b\right)}_{\text{Fluid flow \& cell dragging}} + \underbrace{\Gamma \, b \, n (1 - l)}_{\text{Fluid secretion}} - \underbrace{\lambda \, l}_{\text{Absorption into agar}} [13]\\]
+
+\\[\frac{\partial n}{\partial t} = \nabla^2 n - b \, n \quad \text{and} \quad \frac{\partial s}{\partial t} = \mu \, b [12, 13]\\]
+
+* **For Chiral Hooks (\\(C\\)-Morphotype)**: An orientation/anisotropy field \\(\vec{p}\\) or a chemorepellent field \\(r\\) secreted by pre-spores (\\(\frac{\partial r}{\partial t} = D_r \nabla^2 r + \Gamma_r s - \Omega_r b r - \lambda_r r\\)) forces advancing branch tips to curve continuously to one side, forming curling, psychedelic tendrils [5, 19, 20].
+
+---
+
+### 3. *Proteus mirabilis* (The Esipov-Shapiro Swarming Ring Model)
+*Proteus mirabilis* produces striking "bullseye" or target-board concentric terraced rings through periodic cycles of swarming and consolidation [21, 22].
+
+#### Key Mathematical Mechanism: Cell Age & Density Thresholds
+*P. mirabilis* alternates between short, immobile "swimmer" cells (\\(P_c\\)) and long, hyperflagellated "swarmer" cells (\\(P_s\\)) [23]. Swarmer cells can only migrate when their local biomass exceeds a critical threshold \\(P_{s,\text{min}}\\) to form collective "rafts" [23-25].
+
+\\[D(P_s) = D_0 \cdot \Theta\left(P_s - P_{s,\text{min}}\right) \cdot \exp\left(-\frac{P_c}{P_{c,\text{max}}}\right) [26, 27]\\]
+
+\\[\frac{\partial P_c}{\partial t} = (1 - m) P_c \, q_d + \text{Septation}(P_s) [28]\\]
+
+\\[\frac{\partial P_s}{\partial t} = m P_c \, q_d - \text{Septation}(P_s) + \nabla \cdot \left(D(P_s) \nabla P_s\right) [28, 29]\\]
+
+* **Shader Translation**: 
+  * By enforcing a step-function threshold \\(\Theta(P_s - P_{s,\text{min}})\\), the colony freezes during "consolidation" while swimmer cells divide, then suddenly bursts outward in a rapid "swarming" pulse when the density limit is breached [24, 27]. This produces crisp, terraced concentric step rings [21, 27].
+
+---
+
+### 4. *Escherichia coli* & *Salmonella* (Keller-Segel Chemotaxis Model)
+When grown under metabolic stress, *E. coli* secretes chemoattractants (like aspartate or succinate, \\(v\\)) that pull neighboring cells together into sharp rosette petals, spots, and concentric rings [30, 31].
+
+\\[\frac{\partial u}{\partial t} = \underbrace{D_u \nabla^2 u}_{\text{Random movement}} - \underbrace{\nabla \cdot \left( \chi(u,v) \, u \, \nabla v \right)}_{\text{Chemotactic attraction toward } v} + \underbrace{k_5 u (k_6 h(n) - u)}_{\text{Population growth}} [30, 31]\\]
+
+\\[\frac{\partial v}{\partial t} = D_v \nabla^2 v + k_8 n \, g(u) - k_4 u \, f(v) \quad \text{(Attractant production \& decay)} [30, 31]\\]
+
+---
+
+### 🛠️ Summary: How to Update Your GLSL Shader State
+
+To upgrade a generic Gray-Scott shader into a realistic species engine:
+
+1. **Add a 3rd Channel for Nutrients (\\(N\\))**: Instead of infinite feed rates, initialize \\(N(x,y) = 1.0\\) across the texture at frame 0 and let bacteria consume it locally [2, 32]. Growth stops where \\(N \to 0\\) [33].
+2. **Add a 4th Channel for Inactive/Frozen Cells (\\(S\\))**: Accumulate \\(\Delta S = \mu \cdot B \cdot \Delta t\\) when nutrients are low [3, 13]. This permanently stores the 3D height profile of old growth [3].
+3. **Replace Linear Diffusion with Power-Law Diffusion**: In GLSL, replace `lap.y` with `laplacian(pow(chem.y, k) * chem.y)` to create sharp, non-linear pushing fronts [10-12].
+
+---
+
+🔬 **Would you like me to update `bacterial-neon-shader.glsl` to implement one of these specific species models (like the *Bacillus subtilis* non-linear growth model or *Proteus mirabilis* swarming rings)?**
